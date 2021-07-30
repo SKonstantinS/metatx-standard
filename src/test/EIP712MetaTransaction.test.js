@@ -4,10 +4,11 @@ const web3Abi = require('web3-eth-abi');
 const sigUtil = require('eth-sig-util');
 
 let ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-let publicKey = "0x726cDa2Ac26CeE89F645e55b78167203cAE5410E";
+//let publicKey = "0x726cDa2Ac26CeE89F645e55b78167203cAE5410E"; original
+let publicKey = "0x3A9Acb0c510ceDF6E74Aca3c3b6dD56b8C706895"; //k.shcherbakov@rarible.com
+
 let privateKey = "0x68619b8adb206de04f676007b2437f99ff6129b672495a6951499c6c56bc2fa6";
 let executeMetaTransactionABI = {
-    "constant": false,
     "inputs": [{
         "internalType": "address",
         "name": "userAddress",
@@ -40,7 +41,6 @@ let executeMetaTransactionABI = {
     "type": "function"
 };
 let setQuoteAbi = {
-    "constant": false,
     "inputs": [{
         "internalType": "string",
         "name": "newQuote",
@@ -99,7 +99,6 @@ const getTransactionData = async (nonce, abi, params) => {
     message.nonce = parseInt(nonce);
     message.from = publicKey;
     message.functionSignature = functionSignature;
-
     const dataToSign = {
         types: {
             EIP712Domain: domainType,
@@ -109,10 +108,11 @@ const getTransactionData = async (nonce, abi, params) => {
         primaryType: "MetaTransaction",
         message: message
     };
+
     const signature = sigUtil.signTypedData_v4(new Buffer(privateKey.substring(2, 66), 'hex'), {
         data: dataToSign
     });
-
+    console.log("sks:"+sigUtil.recoverTypedSignature_v4({sig:signature, data:dataToSign}) );
     let r = signature.slice(0, 66);
     let s = "0x".concat(signature.slice(66, 130));
     let v = "0x".concat(signature.slice(130, 132));
@@ -143,10 +143,11 @@ contract("EIP712MetaTransaction", function ([_, owner, account1]) {
             name: "TestContract",
             version: "1",
             verifyingContract: testContract.address,
-            chainId: 99999
+            chainId: 1337
         };
     });
-
+//testContract.address
+//"0x33C26C8B8328FF546aA88D31B4252402BCeE03c7"
     describe("Check Methods", function () {
         it("Should be able to send transaction successfully", async () => {
             let nonce = await testContract.getNonce(publicKey, {
@@ -163,157 +164,166 @@ contract("EIP712MetaTransaction", function ([_, owner, account1]) {
                 executeMetaTransactionABI,
                 [publicKey, functionSignature, r, s, v]
             );
-            await testContract.sendTransaction({
-                value: 0,
-                from: owner,
-                gas: 500000,
-                data: sendTransactionData
-            });
+            console.log("r:"+r);
+            console.log("s:"+s);
+            console.log("v:"+v);
+            console.log("functionSignature:"+functionSignature);
+            console.log("publicKey:"+publicKey);
+            console.log("owner:"+owner);
+            console.log("account1:"+account1);
+//            console.log("chainId:"+await testContract.getChainID());
 
+//            await testContract.sendTransaction({
+//                value: 0,
+//                from: owner,
+//                gas: 500000,
+//                data: sendTransactionData
+//            });
+            await testContract.executeMetaTransaction(publicKey, functionSignature, r, s, v, {from: owner});
             var newNonce = await testContract.getNonce(publicKey);
             assert.isTrue(newNonce.toNumber() == nonce + 1, "Nonce not incremented");
             let newQoute = await testContract.getQuote();
             assert.isTrue(newQoute.currentQuote == quoteToBeSet, "Unable to set quote");
         });
 
-        it("Call the contract method directly", async() => {
-
-            let newQuoteToSet = "New Quote";
-            var oldNonce = await testContract.getNonce(publicKey);
-            let sendTransactionData = web3Abi.encodeFunctionCall(
-                setQuoteAbi,
-                [newQuoteToSet]
-            );
-
-            await testContract.sendTransaction({
-                value: 0,
-                from: owner,
-                gas: 500000,
-                data: sendTransactionData
-            });
-
-            var newNonce = await testContract.getNonce(publicKey);
-            assert.isTrue(newNonce.toNumber() == oldNonce.toNumber(), "Nonce are not same");
-            let updatedQuote = await testContract.getQuote();
-            assert.isTrue(updatedQuote.currentQuote == newQuoteToSet, "Unable to set quote");
-            assert.isTrue(updatedQuote.currentOwner == owner, "Owner does not match");
-        })
-
-        it("Should fail when try to call executeMetaTransaction method itself", async () => {
-            let nonce = await testContract.getNonce(publicKey, {
-                from: owner
-            });
-            let setQuoteData = await getTransactionData(nonce, setQuoteAbi, [quoteToBeSet]);
-            let {r, s, v, functionSignature} = await getTransactionData(nonce,
-                executeMetaTransactionABI,
-                [publicKey, setQuoteData.functionSignature, setQuoteData.r, setQuoteData.s, setQuoteData.v])
-            const sendTransactionData = web3Abi.encodeFunctionCall(
-                executeMetaTransactionABI,
-                [publicKey, functionSignature, r, s, v]
-            );
-
-            try {
-                await testContract.sendTransaction({
-                    value: 0,
-                    from: owner,
-                    gas: 500000,
-                    data: sendTransactionData
-                });
-            } catch (error) {
-                assert.isTrue(error.message.includes("functionSignature can not be of executeMetaTransaction method"), `Wrong failure type`);
-            }
-        });
-
-        it("Should fail when replay transaction", async () => {
-            let nonce = await testContract.getNonce(publicKey, {
-                from: owner
-            });
-            let {
-                r,
-                s,
-                v,
-                functionSignature
-            } = await getTransactionData(nonce, setQuoteAbi, [quoteToBeSet]);
-
-            const sendTransactionData = web3Abi.encodeFunctionCall(
-                executeMetaTransactionABI,
-                [publicKey, functionSignature, r, s, v]
-            );
-
-            await testContract.sendTransaction({
-                value: 0,
-                from: owner,
-                gas: 500000,
-                data: sendTransactionData
-            });
-
-            try {
-                await testContract.sendTransaction({
-                    value: 0,
-                    from: owner,
-                    gas: 500000,
-                    data: sendTransactionData
-                });
-            } catch (error) {
-                assert.isTrue(error.message.includes("Signer and signature do not match"), `Wrong failure type`);
-            }
-        });
-
-        it("Should fail when user address is Zero", async () => {
-
-            let nonce = await testContract.getNonce(publicKey, {
-                from: owner
-            });
-            let {
-                r,
-                s,
-                v,
-                functionSignature
-            } = await getTransactionData(nonce, setQuoteAbi, [quoteToBeSet]);
-
-            const sendTransactionData = web3Abi.encodeFunctionCall(
-                executeMetaTransactionABI,
-                [ZERO_ADDRESS, functionSignature, r, s, v]
-            );
-
-            try {
-                await testContract.sendTransaction({
-                    value: 0,
-                    from: owner,
-                    gas: 500000,
-                    data: sendTransactionData
-                });
-            } catch (error) {
-                assert.isTrue(error.message.includes("Signer and signature do not match"), `Wrong failure type`);
-            }
-        });
-
-        it("Should be failed - Signer and Signature do not match", async () => {
-            let nonce = await eip712MetaTransaction.getNonce(publicKey, {
-                from: owner
-            });
-            let {
-                r,
-                s,
-                v,
-                functionSignature
-            } = await getTransactionData(nonce, setQuoteAbi, [quoteToBeSet]);
-
-            const sendTransactionData = web3Abi.encodeFunctionCall(
-                executeMetaTransactionABI,
-                [account1, functionSignature, r, s, v]
-            );
-
-            try {
-                await testContract.sendTransaction({
-                    value: 0,
-                    from: owner,
-                    gas: 500000,
-                    data: sendTransactionData
-                });
-            } catch (error) {
-                assert.isTrue(error.message.includes("Signer and signature do not match"), `Wrong failure type`);
-            }
-        });
+//        it("Call the contract method directly", async() => {
+//
+//            let newQuoteToSet = "New Quote";
+//            var oldNonce = await testContract.getNonce(publicKey);
+//            let sendTransactionData = web3Abi.encodeFunctionCall(
+//                setQuoteAbi,
+//                [newQuoteToSet]
+//            );
+//
+//            await testContract.sendTransaction({
+//                value: 0,
+//                from: owner,
+//                gas: 500000,
+//                data: sendTransactionData
+//            });
+//
+//            var newNonce = await testContract.getNonce(publicKey);
+//            assert.isTrue(newNonce.toNumber() == oldNonce.toNumber(), "Nonce are not same");
+//            let updatedQuote = await testContract.getQuote();
+//            assert.isTrue(updatedQuote.currentQuote == newQuoteToSet, "Unable to set quote");
+//            assert.isTrue(updatedQuote.currentOwner == owner, "Owner does not match");
+//        })
+//
+//        it("Should fail when try to call executeMetaTransaction method itself", async () => {
+//            let nonce = await testContract.getNonce(publicKey, {
+//                from: owner
+//            });
+//            let setQuoteData = await getTransactionData(nonce, setQuoteAbi, [quoteToBeSet]);
+//            let {r, s, v, functionSignature} = await getTransactionData(nonce,
+//                executeMetaTransactionABI,
+//                [publicKey, setQuoteData.functionSignature, setQuoteData.r, setQuoteData.s, setQuoteData.v])
+//            const sendTransactionData = web3Abi.encodeFunctionCall(
+//                executeMetaTransactionABI,
+//                [publicKey, functionSignature, r, s, v]
+//            );
+//
+//            try {
+//                await testContract.sendTransaction({
+//                    value: 0,
+//                    from: owner,
+//                    gas: 500000,
+//                    data: sendTransactionData
+//                });
+//            } catch (error) {
+//                assert.isTrue(error.message.includes("functionSignature can not be of executeMetaTransaction method"), `Wrong failure type`);
+//            }
+//        });
+//
+//        it("Should fail when replay transaction", async () => {
+//            let nonce = await testContract.getNonce(publicKey, {
+//                from: owner
+//            });
+//            let {
+//                r,
+//                s,
+//                v,
+//                functionSignature
+//            } = await getTransactionData(nonce, setQuoteAbi, [quoteToBeSet]);
+//
+//            const sendTransactionData = web3Abi.encodeFunctionCall(
+//                executeMetaTransactionABI,
+//                [publicKey, functionSignature, r, s, v]
+//            );
+//
+//            await testContract.sendTransaction({
+//                value: 0,
+//                from: owner,
+//                gas: 500000,
+//                data: sendTransactionData
+//            });
+//
+//            try {
+//                await testContract.sendTransaction({
+//                    value: 0,
+//                    from: owner,
+//                    gas: 500000,
+//                    data: sendTransactionData
+//                });
+//            } catch (error) {
+//                assert.isTrue(error.message.includes("Signer and signature do not match"), `Wrong failure type`);
+//            }
+//        });
+//
+//        it("Should fail when user address is Zero", async () => {
+//
+//            let nonce = await testContract.getNonce(publicKey, {
+//                from: owner
+//            });
+//            let {
+//                r,
+//                s,
+//                v,
+//                functionSignature
+//            } = await getTransactionData(nonce, setQuoteAbi, [quoteToBeSet]);
+//
+//            const sendTransactionData = web3Abi.encodeFunctionCall(
+//                executeMetaTransactionABI,
+//                [ZERO_ADDRESS, functionSignature, r, s, v]
+//            );
+//
+//            try {
+//                await testContract.sendTransaction({
+//                    value: 0,
+//                    from: owner,
+//                    gas: 500000,
+//                    data: sendTransactionData
+//                });
+//            } catch (error) {
+//                assert.isTrue(error.message.includes("Signer and signature do not match"), `Wrong failure type`);
+//            }
+//        });
+//
+//        it("Should be failed - Signer and Signature do not match", async () => {
+//            let nonce = await eip712MetaTransaction.getNonce(publicKey, {
+//                from: owner
+//            });
+//            let {
+//                r,
+//                s,
+//                v,
+//                functionSignature
+//            } = await getTransactionData(nonce, setQuoteAbi, [quoteToBeSet]);
+//
+//            const sendTransactionData = web3Abi.encodeFunctionCall(
+//                executeMetaTransactionABI,
+//                [account1, functionSignature, r, s, v]
+//            );
+//
+//            try {
+//                await testContract.sendTransaction({
+//                    value: 0,
+//                    from: owner,
+//                    gas: 500000,
+//                    data: sendTransactionData
+//                });
+//            } catch (error) {
+//                assert.isTrue(error.message.includes("Signer and signature do not match"), `Wrong failure type`);
+//            }
+//        });
     });
 });

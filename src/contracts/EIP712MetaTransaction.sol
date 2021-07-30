@@ -1,5 +1,5 @@
 //SPDX-License-Identifier: MIT
-pragma solidity 0.6.6;
+pragma solidity 0.7.6;
 
 import "./lib/EIP712Base.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
@@ -68,9 +68,24 @@ contract EIP712MetaTransaction is EIP712Base {
 
     function verify(address user, MetaTransaction memory metaTx, bytes32 sigR, bytes32 sigS, uint8 sigV) internal view returns (bool) {
         address signer = ecrecover(toTypedMessageHash(hashMetaTransaction(metaTx)), sigV, sigR, sigS);
+//        string memory signerAddress = toString(signer);
+//        revert(signerAddress);
         require(signer != address(0), "Invalid signature");
         return signer == user;
     }
+
+//    function toString(address _addr) internal pure returns (string memory) {
+//        bytes32 value = bytes32(uint256(_addr));
+//        bytes memory alphabet = "0123456789abcdef";
+//        bytes memory str = new bytes(42);
+//        str[0] = '0';
+//        str[1] = 'x';
+//        for (uint256 i = 0; i < 20; i++) {
+//            str[2+i*2] = alphabet[uint8(value[i + 12] >> 4)];
+//            str[3+i*2] = alphabet[uint8(value[i + 12] & 0x0f)];
+//        }
+//        return string(str);
+//    }
 
     function msgSender() internal view returns(address sender) {
         if(msg.sender == address(this)) {
