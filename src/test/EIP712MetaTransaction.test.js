@@ -4,8 +4,7 @@ const web3Abi = require('web3-eth-abi');
 const sigUtil = require('eth-sig-util');
 
 let ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-//let publicKey = "0x726cDa2Ac26CeE89F645e55b78167203cAE5410E"; original
-let publicKey = "0x3A9Acb0c510ceDF6E74Aca3c3b6dD56b8C706895"; //k.shcherbakov@rarible.com
+let publicKey = "0x726cDa2Ac26CeE89F645e55b78167203cAE5410E";
 
 let privateKey = "0x68619b8adb206de04f676007b2437f99ff6129b672495a6951499c6c56bc2fa6";
 let executeMetaTransactionABI = {
@@ -108,6 +107,7 @@ const getTransactionData = async (nonce, abi, params) => {
         primaryType: "MetaTransaction",
         message: message
     };
+    console.log("domainData", domainData)
 
     const signature = sigUtil.signTypedData_v4(new Buffer(privateKey.substring(2, 66), 'hex'), {
         data: dataToSign
@@ -150,9 +150,7 @@ contract("EIP712MetaTransaction", function ([_, owner, account1]) {
 //"0x33C26C8B8328FF546aA88D31B4252402BCeE03c7"
     describe("Check Methods", function () {
         it("Should be able to send transaction successfully", async () => {
-            let nonce = await testContract.getNonce(publicKey, {
-                from: owner
-            });
+            let nonce = await testContract.getNonce(publicKey);
             let {
                 r,
                 s,
@@ -167,7 +165,10 @@ contract("EIP712MetaTransaction", function ([_, owner, account1]) {
             console.log("r:"+r);
             console.log("s:"+s);
             console.log("v:"+v);
+            console.log("address", testContract.address);
+            console.log("chainId", await testContract.getChainID().toString(10));
             console.log("functionSignature:"+functionSignature);
+            console.log("nonce:"+nonce);
             console.log("publicKey:"+publicKey);
             console.log("owner:"+owner);
             console.log("account1:"+account1);
