@@ -21,7 +21,7 @@ contract TestContract {
 
     function setQuote(string memory newQuote) public {
         quote = newQuote;
-        owner = LibEIP712MetaTransaction.msgSender();
+        owner = msgSender();
     }
 
     function getQuote() view public returns (string memory currentQuote, address currentOwner) {
@@ -50,5 +50,9 @@ contract TestContract {
 
     function getNonce(address user) external view returns (uint256 nonce) {
         nonce = nonces[user];
+    }
+
+    function msgSender() internal view returns(address sender) {
+        return LibEIP712MetaTransaction._msgSender();
     }
 }
