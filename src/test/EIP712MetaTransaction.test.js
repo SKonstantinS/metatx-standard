@@ -1,5 +1,6 @@
-const EIP712MetaTransaction = artifacts.require("EIP712MetaTransaction");
-const TestContract = artifacts.require("TestContract");
+//const EIP712MetaTransaction = artifacts.require("EIP712MetaTransaction");
+const TestContract = artifacts.require("TestContract.sol");
+const LibTestContract = artifacts.require("LibEIP712MetaTransaction.sol");
 const web3Abi = require('web3-eth-abi');
 const sigUtil = require('eth-sig-util');
 
@@ -129,16 +130,14 @@ const getTransactionData = async (nonce, abi, params) => {
 
 contract("EIP712MetaTransaction", function ([_, owner, account1]) {
 
-    let eip712MetaTransaction;
     let testContract
 
     before('before', async function () {
-        eip712MetaTransaction = await EIP712MetaTransaction.new("TestContract", "1", {
-            from: owner
-        });
         testContract = await TestContract.new({
             from: owner
         });
+        testContract.initialize("TestContract", "1");
+
         domainData = {
             name: "TestContract",
             version: "1",
@@ -166,20 +165,20 @@ contract("EIP712MetaTransaction", function ([_, owner, account1]) {
             console.log("s:"+s);
             console.log("v:"+v);
             console.log("address", testContract.address);
-            console.log("chainId", await testContract.getChainID().toString(10));
+//            console.log("chainId", await testContract.getChainID().toString(10));
             console.log("functionSignature:"+functionSignature);
             console.log("nonce:"+nonce);
             console.log("publicKey:"+publicKey);
             console.log("owner:"+owner);
             console.log("account1:"+account1);
-//            console.log("chainId:"+await testContract.getChainID());
-
+//            Способ №1 по вызову транзакции
 //            await testContract.sendTransaction({
 //                value: 0,
 //                from: owner,
 //                gas: 500000,
 //                data: sendTransactionData
 //            });
+//            Способ №2 по вызову транзакции (Женя)
             await testContract.executeMetaTransaction(publicKey, functionSignature, r, s, v, {from: owner});
             var newNonce = await testContract.getNonce(publicKey);
             assert.isTrue(newNonce.toNumber() == nonce + 1, "Nonce not incremented");
@@ -271,7 +270,6 @@ contract("EIP712MetaTransaction", function ([_, owner, account1]) {
         });
 
         it("Should fail when user address is Zero", async () => {
-
             let nonce = await testContract.getNonce(publicKey, {
                 from: owner
             });
@@ -300,7 +298,7 @@ contract("EIP712MetaTransaction", function ([_, owner, account1]) {
         });
 
         it("Should be failed - Signer and Signature do not match", async () => {
-            let nonce = await eip712MetaTransaction.getNonce(publicKey, {
+            let nonce = await testContract.getNonce(publicKey, {
                 from: owner
             });
             let {
