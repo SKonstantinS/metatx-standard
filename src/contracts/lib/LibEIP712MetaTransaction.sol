@@ -2,7 +2,10 @@
 
 pragma solidity 0.7.6;
 
+import "@openzeppelin/contracts/math/SafeMath.sol";
+
 library LibEIP712MetaTransaction {
+    using SafeMath for uint256;
 
     bytes32 private constant META_TRANSACTION_TYPEHASH = keccak256(bytes("MetaTransaction(uint256 nonce,address from,bytes functionSignature)"));
     bytes32 internal constant EIP712_DOMAIN_TYPEHASH = keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -28,6 +31,8 @@ library LibEIP712MetaTransaction {
         uint256 chainId;
         address verifyingContract;
     }
+
+    event MetaTransactionExecuted(address userAddress, address payable relayerAddress, bytes functionSignature);
 
     function setDomainSeparator(string memory name, string memory version) internal returns(bytes32 domainSeparator){
         domainSeparator = keccak256(abi.encode(
@@ -74,6 +79,25 @@ library LibEIP712MetaTransaction {
             metaTx.from,
             keccak256(metaTx.functionSignature)
         ));
+    }
+
+    function _executeMetaTransaction(address userAddress, mapping (address => uint256) storage _nonces, bytes32 _domainSeparator,
+        bytes memory functionSignature, bytes32 sigR, bytes32 sigS, uint8 sigV) internal returns (bytes memory) {
+        bytes4 destinationFunctionSig = convertBytesToBytes4(functionSignature);
+        require(destinationFunctionSig != msg.sig, "functionSignature can not be of executeMetaTransaction method");
+        MetaTransaction memory metaTx = MetaTransaction({
+        nonce : _nonces[userAddress],
+        from : userAddress,
+        functionSignature : functionSignature
+        });
+        require(verify(userAddress, metaTx, _domainSeparator, sigR, sigS, sigV), "Signer and signature do not match");
+        _nonces[userAddress] = _nonces[userAddress].add(1);
+        // Append userAddress at the end to extract it from calling context
+        (bool success, bytes memory returnData) = address(this).call(abi.encodePacked(functionSignature, userAddress));
+
+        require(success, "Function call not successful");
+        emit MetaTransactionExecuted(userAddress, msg.sender, functionSignature);
+        return returnData;
     }
 
     function verify(address user, MetaTransaction memory metaTx, bytes32 _domainSeparator, bytes32 sigR, bytes32 sigS, uint8 sigV) internal view returns (bool) {
